@@ -1,0 +1,60 @@
+name: Deploy Backend
+
+# 推到 main 分支时触发；也可手动触发
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 同一时间只跑一个部署，避免两次推送并发覆盖
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true   # 缓存依赖，加快后续构建
+
+      - name: 编译静态二进制
+        # CGO_ENABLED=0 + 纯 Go sqlite 驱动 => 零依赖静态二进制，服务器无需任何运行时
+        # -ldflags "-s -w" 去掉调试符号，二进制更小
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-s -w" -o qingzhang .
+          ls -lh qingzhang
+
+      - name: 上传二进制到服务器
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}        # 没改过默认 22，也建议设成 Secret
+          source: "qingzhang"
+          # 先传到临时目录，下一步再原子替换，避免传一半时服务崩
+          target: "/opt/qingzhang/_staging"
+
+      - name: 原子替换并重启服务
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            # 用 mv 原子替换（同分区 mv 是原子操作），再重启 systemd
+            chmod +x /opt/qingzhang/_staging/qingzhang
+            mv /opt/qingzhang/_staging/qingzhang /opt/qingzhang/qingzhang
+            sudo systemctl restart qingzhang
+            sleep 2
+            sudo systemctl is-active qingzhang   # 失败会让这步非零退出，Actions 标红
