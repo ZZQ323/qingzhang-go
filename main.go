@@ -4,25 +4,26 @@ import (
 	"log"
 	"net/http"
 	"os"
-
 	"qingzhang/internal/db"
 	"qingzhang/internal/handler"
 	"qingzhang/internal/middleware"
 )
 
 func main() {
+	// dsn - Data Source Name
 	dsn := env("DB_PATH", "file:qingzhang.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
-	store, err := db.Open(dsn)
+	db, err := db.Open(dsn)
 	if err != nil {
 		log.Fatalf("open db: %v", err)
 	}
-	defer store.Close()
-	if err := store.Migrate(); err != nil {
+
+	defer db.Close()
+	if err := db.Migrate(); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 
 	h := &handler.Handler{
-		Store:     store,
+		Store:     db,
 		JWTSecret: []byte(env("JWT_SECRET", "change_me_to_a_long_random_secret_32b+")),
 		WxAppID:   env("WX_APPID", ""),
 		WxSecret:  env("WX_SECRET", ""),
@@ -41,9 +42,9 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
-func env(k, def string) string {
-	if v := os.Getenv(k); v != "" {
+func env(key, defaultVal string) string {
+	if v := os.Getenv(key); v != "" {
 		return v
 	}
-	return def
+	return defaultVal
 }

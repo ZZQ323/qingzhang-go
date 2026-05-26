@@ -2,6 +2,7 @@ package db
 
 import "time"
 
+// Data Access Object 层
 type User struct {
 	ID       int64  `json:"id"`
 	Openid   string `json:"-"`
