@@ -1,0 +1,20 @@
+# /etc/systemd/system/qingzhang.service
+# Go 版：单个二进制，常驻内存约 50-80MB
+[Unit]
+Description=Qingzhang Ledger (Go)
+After=network.target
+
+[Service]
+User=www
+WorkingDirectory=/opt/qingzhang
+ExecStart=/opt/qingzhang/qingzhang
+Environment=PORT=8080
+Environment=DB_PATH=file:/opt/qingzhang/qingzhang.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)
+Environment=JWT_SECRET=换成32字节以上的随机串
+Environment=WX_APPID=你的小程序appid
+Environment=WX_SECRET=你的小程序secret
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
