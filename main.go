@@ -42,6 +42,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(addr, mux))
 }
 
+// 读取环境变量的，并且在环境变量不存在或为空时，提供一个默认值
 func env(key, defaultVal string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

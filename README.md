@@ -1,5 +1,7 @@
 # 清账 · Go + SQLite 极简记账后端
 
+前端：https://github.com/ZZQ323/qingzhang-miniapp
+
 为 2 核 2G 服务器设计，单个静态二进制 + 一个 SQLite 文件，常驻内存约 50–80MB。零中间件，与你机器上已有的 VitePress 博客（GitHub 构建，静态托管）、frpc 共存毫无压力。
 
 ## 架构
