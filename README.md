@@ -23,6 +23,49 @@ curl -s -X POST localhost:8080/api/auth/login -d "{\"code\":\"test1\"}"
 curl -s localhost:8080/api/sync/pull -H "Authorization: Bearer <token>"
 ```
 
+如果注册了小程序：
+```bash
+cd qingzhang-go
+set WX_APPID=你的appid           # Windows cmd
+set WX_SECRET=你的secret
+set JWT_SECRET=本地32字节随机串
+go run .
+```
+
+`JWT_SECRET` 可以使用 `openssl` 生成 `openssl rand -base64 64`。
+
+## 项目部署
+
+
+```bash
+sudo tee /etc/systemd/system/qingzhang.service >/dev/null <<'EOF'
+[Unit]
+Description=Qingzhang Ledger (Go)
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/qingzhang
+ExecStart=/opt/qingzhang/qingzhang
+Environment=PORT=8080
+Environment=DB_PATH=file:/opt/qingzhang/qingzhang.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)
+Environment=JWT_SECRET=换成真实的32字节随机串
+Environment=WX_APPID=你的appid
+Environment=WX_SECRET=你的secret
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+# 等上传代码后再
+#部署成功后第一次要 enable
+sudo systemctl enable --now qingzhang
+sudo systemctl status qingzhang
+```
+
 ## 项目背景
 
 为 2 核 2G 服务器设计，单个静态二进制 + 一个 SQLite 文件，常驻内存约 50–80MB。零中间件，与你机器上已有的 VitePress 博客（GitHub 构建，静态托管）、frpc 共存毫无压力。
