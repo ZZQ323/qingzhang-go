@@ -1,6 +1,29 @@
 # 清账 · Go + SQLite 极简记账后端
 
-前端：https://github.com/ZZQ323/qingzhang-miniapp
+项目前端：https://github.com/ZZQ323/qingzhang-miniapp
+
+## 项目启动
+
+如果是没有注册小程序，那么设置环境变量：
+- DEV_MODE=1
+- JWT_SECRET=本地随便一串至少32字节xxxxxxxxxx 
+
+然后
+```bash
+go mod tidy          # 首次：联网拉 modernc.org/sqlite，生成 go.sum
+go run .
+```
+
+没有注册小程序可以测试：
+
+```bash
+# 登录拿 token
+curl -s -X POST localhost:8080/api/auth/login -d "{\"code\":\"test1\"}"
+# 用返回的 token 拉/推
+curl -s localhost:8080/api/sync/pull -H "Authorization: Bearer <token>"
+```
+
+## 项目背景
 
 为 2 核 2G 服务器设计，单个静态二进制 + 一个 SQLite 文件，常驻内存约 50–80MB。零中间件，与你机器上已有的 VitePress 博客（GitHub 构建，静态托管）、frpc 共存毫无压力。
 
