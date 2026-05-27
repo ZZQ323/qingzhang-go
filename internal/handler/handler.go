@@ -118,6 +118,23 @@ func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// POST /api/book/join  body: {bookId}  邀请码 = 账本主人的 userId
+func (h *Handler) JoinBook(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.UserID(r)
+	var body struct {
+		BookID int64 `json:"bookId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.BookID <= 0 {
+		writeErr(w, "缺少 bookId")
+		return
+	}
+	if err := h.Store.JoinBook(uid, body.BookID); err != nil {
+		writeErr(w, err.Error())
+		return
+	}
+	writeOK(w, map[string]interface{}{"bookId": body.BookID})
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a
