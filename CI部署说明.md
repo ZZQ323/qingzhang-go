@@ -17,10 +17,12 @@
 
 | Secret 名 | 值 | 说明 |
 |---|---|---|
-| `SSH_HOST` | 你服务器的 IP 或域名 | |
-| `SSH_USER` | 部署用的 Linux 用户 | 建议专用账号，非 root |
-| `SSH_PORT` | SSH 端口（如 22） | |
-| `SSH_KEY` | SSH **私钥**全文 | 见下方生成方法 |
+| `SERVER_HOST` | 你服务器的 IP 或域名 | |
+| `SERVER_USER` | 部署用的 Linux 用户 | 建议专用账号，非 root |
+| `SERVER_SSH_KEY` | SSH **私钥**全文 | 见下方生成方法 |
+| `SERVER_PATH` | 部署目录，如 `/opt/qingzhang` | 二进制与 _staging 都在此目录下 |
+
+> SSH 端口固定走 22（deploy.yml 里写死）。要改端口就在 deploy.yml 把 `port: 22` 改掉或新增 Secret。
 
 注意：`WX_SECRET`、`JWT_SECRET`、`WX_APPID` 这些**不放这里**——它们是运行时配置，写在服务器的 systemd 文件里（见下），不经过 CI。CI 只负责传二进制 + 重启，碰不到业务密钥。
 
