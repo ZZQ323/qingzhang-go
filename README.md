@@ -75,11 +75,13 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## 备份
 
-数据全在 `qingzhang.db` 一个文件。WAL 模式下安全备份做法：
+数据全在 `qingzhang.db` 一个文件。已提供 `deploy/backup.sh`（WAL 安全的 `.backup` 快照 + gzip + 自动清理过期）：
 ```bash
-sqlite3 /opt/qingzhang/qingzhang.db ".backup '/backup/qingzhang-$(date +%F).db'"
+bash deploy/backup.sh                    # 手动备份一次
+# 每天 03:30 自动备份，crontab -e 加：
+# 30 3 * * * /usr/bin/bash /opt/qingzhang/deploy/backup.sh >> /var/log/qingzhang-backup.log 2>&1
 ```
-丢进 crontab 每天一次即可。或者直接 `cp` 也行（停机时）。
+可用 `DB_FILE` / `BACKUP_DIR` / `KEEP_DAYS` 环境变量覆盖路径与保留天数。
 
 ## 注意
 
