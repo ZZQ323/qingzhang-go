@@ -27,6 +27,10 @@ func main() {
 		JWTSecret: []byte(env("JWT_SECRET", "change_me_to_a_long_random_secret_32b+")),
 		WxAppID:   env("WX_APPID", ""),
 		WxSecret:  env("WX_SECRET", ""),
+		DevMode:   env("DEV_MODE", "") != "",
+	}
+	if h.DevMode {
+		log.Print("DEV_MODE 已开启：登录将跳过微信换 openid，用 code 派生 openid 直接签发 token")
 	}
 
 	mux := http.NewServeMux()

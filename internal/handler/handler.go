@@ -15,6 +15,7 @@ type Handler struct {
 	JWTSecret []byte
 	WxAppID   string
 	WxSecret  string
+	DevMode   bool // 开发态跳过微信换 openid，用固定 openid 直接签 token
 }
 
 // 统一响应包装 {code,msg,data}
@@ -42,13 +43,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, "缺少 code")
 		return
 	}
-	sess, err := wx.Code2Session(h.WxAppID, h.WxSecret, body.Code)
-	if err != nil {
-		writeErr(w, err.Error())
-		return
+	var openid string
+	if h.DevMode {
+		// 开发态：用 code 派生固定 openid，免接微信也能联调；不同 code 视为不同用户
+		openid = "dev_" + body.Code
+	} else {
+		sess, err := wx.Code2Session(h.WxAppID, h.WxSecret, body.Code)
+		if err != nil {
+			writeErr(w, err.Error())
+			return
+		}
+		openid = sess.Openid
 	}
-	nickname := "用户" + sess.Openid[max(0, len(sess.Openid)-4):]
-	u, err := h.Store.FindOrCreateUser(sess.Openid, nickname)
+	nickname := "用户" + openid[max(0, len(openid)-4):]
+	u, err := h.Store.FindOrCreateUser(openid, nickname)
 	if err != nil {
 		writeErr(w, err.Error())
 		return
