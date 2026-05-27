@@ -31,6 +31,9 @@ func main() {
 	}
 	if h.DevMode {
 		log.Print("DEV_MODE 已开启：登录将跳过微信换 openid，用 code 派生 openid 直接签发 token")
+	} else if h.WxAppID == "" || h.WxSecret == "" {
+		// 生产态必须接入真实小程序凭证，否则 wx.login 换 openid 无从谈起
+		log.Fatal("未配置 WX_APPID/WX_SECRET：生产态需设这两个环境变量，本地联调可设 DEV_MODE=1")
 	}
 
 	mux := http.NewServeMux()
