@@ -1,6 +1,10 @@
 package db
 
-import "time"
+import (
+	"database/sql"
+	"fmt"
+	"time"
+)
 
 // Data Access Object 层
 type User struct {
@@ -23,6 +27,7 @@ type Record struct {
 	HappenedAt   string `json:"happenedAt"` // YYYY-MM-DD
 	IsDeleted    int    `json:"isDeleted"`
 	UpdatedAt    string `json:"updatedAt"`
+	RecorderName string `json:"recorderName"` // 记账人昵称（共享账本下区分是谁记的）
 }
 
 // FindOrCreateUser：按 openid 找用户，不存在则创建并把 book_id 设为自身 id（个人账本）
@@ -53,10 +58,11 @@ func (s *Store) BookIDOf(userID int64) (int64, error) {
 // Pull：拉取该账本在 since 之后变更的记录（含软删，供客户端同步删除）
 func (s *Store) Pull(bookID int64, since string) ([]Record, error) {
 	rows, err := s.DB.Query(`
-		SELECT id, book_id, user_id, type, amount, category,
-		       COALESCE(note,''), COALESCE(account,''), COALESCE(counterparty,''),
-		       happened_at, is_deleted, updated_at
-		FROM record WHERE book_id=? AND updated_at > ? ORDER BY updated_at ASC`,
+		SELECT r.id, r.book_id, r.user_id, r.type, r.amount, r.category,
+		       COALESCE(r.note,''), COALESCE(r.account,''), COALESCE(r.counterparty,''),
+		       r.happened_at, r.is_deleted, r.updated_at, COALESCE(u.nickname,'')
+		FROM record r LEFT JOIN user u ON u.id = r.user_id
+		WHERE r.book_id=? AND r.updated_at > ? ORDER BY r.updated_at ASC`,
 		bookID, since)
 	if err != nil {
 		return nil, err
@@ -66,12 +72,27 @@ func (s *Store) Pull(bookID int64, since string) ([]Record, error) {
 	for rows.Next() {
 		var r Record
 		if err := rows.Scan(&r.ID, &r.BookID, &r.UserID, &r.Type, &r.Amount, &r.Category,
-			&r.Note, &r.Account, &r.Counterparty, &r.HappenedAt, &r.IsDeleted, &r.UpdatedAt); err != nil {
+			&r.Note, &r.Account, &r.Counterparty, &r.HappenedAt, &r.IsDeleted, &r.UpdatedAt,
+			&r.RecorderName); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// JoinBook：把当前用户的 book_id 改为目标账本 id（邀请码即账本主人的 user id）。
+// 校验目标账本存在（必须有一个 user 的 id 等于该 book_id，即账本主人）。
+func (s *Store) JoinBook(userID, bookID int64) error {
+	var exists int
+	if err := s.DB.QueryRow(`SELECT 1 FROM user WHERE id=?`, bookID).Scan(&exists); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("邀请码无效")
+		}
+		return err
+	}
+	_, err := s.DB.Exec(`UPDATE user SET book_id=? WHERE id=?`, bookID, userID)
+	return err
 }
 
 // Upsert：id<=0 视为新增；否则按 id 更新。统一在一个事务里写，配合单连接保证串行。
