@@ -29,6 +29,7 @@ type Record struct {
 	IsDeleted    int    `json:"isDeleted"`
 	UpdatedAt    string `json:"updatedAt"`
 	RecorderName string `json:"recorderName"` // 记账人昵称（共享账本下区分是谁记的）
+	ExternalID   string `json:"-"`            // 账单导入的交易单号，用于去重；手记记录为空
 }
 
 // FindOrCreateUser：按 openid 找用户，不存在则创建并把 book_id 设为自身 id（个人账本）
@@ -94,6 +95,43 @@ func (s *Store) JoinBook(userID, bookID int64) error {
 	}
 	_, err := s.DB.Exec(`UPDATE user SET book_id=? WHERE id=?`, bookID, userID)
 	return err
+}
+
+// ImportRecords：账单导入专用。按 external_id 去重，已存在则跳过。
+// 返回 (新增数, 跳过数)。整批一个事务。
+func (s *Store) ImportRecords(bookID, userID int64, recs []Record) (int, int, error) {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	imported, skipped := 0, 0
+	for _, r := range recs {
+		if r.ExternalID != "" {
+			var n int
+			if err := tx.QueryRow(`SELECT COUNT(1) FROM record WHERE book_id=? AND external_id=?`,
+				bookID, r.ExternalID).Scan(&n); err != nil {
+				return 0, 0, err
+			}
+			if n > 0 {
+				skipped++
+				continue
+			}
+		}
+		if _, err := tx.Exec(`INSERT INTO record
+			(book_id,user_id,type,amount,category,note,account,counterparty,happened_at,is_deleted,updated_at,external_id)
+			VALUES(?,?,?,?,?,?,?,?,?,0,?,?)`,
+			bookID, userID, r.Type, r.Amount, r.Category, r.Note, r.Account, r.Counterparty,
+			r.HappenedAt, now, r.ExternalID); err != nil {
+			return 0, 0, err
+		}
+		imported++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return imported, skipped, nil
 }
 
 // Upsert：id<=0 视为新增；否则按 id 更新。统一在一个事务里写，配合单连接保证串行。

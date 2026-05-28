@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"strings"
 
 	_ "modernc.org/sqlite" // 纯 Go 驱动，无需 cgo / C 工具链
 )
@@ -50,9 +51,18 @@ func (s *Store) Migrate() error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_sync  ON record(book_id, updated_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_query ON record(book_id, happened_at)`,
+		// 账单导入去重：external_id 为交易单号，TEXT 不限长（可容纳 56+ 位）。
+		// 老库升级用 ALTER 补列（已存在会报错，忽略）。
+		`ALTER TABLE record ADD COLUMN external_id TEXT NOT NULL DEFAULT ''`,
+		// 同一账本内交易单号唯一；空串不参与去重（手记记录无单号）。
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_extid ON record(book_id, external_id) WHERE external_id <> ''`,
 	}
 	for _, q := range stmts {
 		if _, err := s.DB.Exec(q); err != nil {
+			// ALTER ADD COLUMN 在列已存在时会报错，属预期，跳过
+			if strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
 			return err
 		}
 	}
