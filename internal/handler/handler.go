@@ -2,9 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
+	"qingzhang/internal/apperr"
 	"qingzhang/internal/db"
 	"qingzhang/internal/middleware"
 	"qingzhang/internal/wx"
@@ -29,9 +31,15 @@ func writeOK(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(resp{Code: 0, Msg: "ok", Data: data})
 }
-func writeErr(w http.ResponseWriter, msg string) {
+// writeErr 统一错误出口：业务错误(*apperr.Error)按其 code/msg 返回；
+// 其余未归类错误一律包成 CodeInternal，避免把底层细节暴露成裸字符串。
+func writeErr(w http.ResponseWriter, err error) {
+	var ae *apperr.Error
+	if !errors.As(err, &ae) {
+		ae = apperr.Internal(err.Error())
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(resp{Code: 1, Msg: msg})
+	json.NewEncoder(w).Encode(resp{Code: ae.Code, Msg: ae.Msg})
 }
 
 // POST /api/auth/login  body: {code}
@@ -40,7 +48,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Code string `json:"code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Code == "" {
-		writeErr(w, "缺少 code")
+		writeErr(w, apperr.Param("缺少登录 code"))
 		return
 	}
 	var openid string
@@ -50,7 +58,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	} else {
 		sess, err := wx.Code2Session(h.WxAppID, h.WxSecret, body.Code)
 		if err != nil {
-			writeErr(w, err.Error())
+			writeErr(w, apperr.WxLogin("微信登录失败："+err.Error()))
 			return
 		}
 		openid = sess.Openid
@@ -58,12 +66,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	nickname := "用户" + openid[max(0, len(openid)-4):]
 	u, err := h.Store.FindOrCreateUser(openid, nickname)
 	if err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	token, err := middleware.Issue(h.JWTSecret, u.ID)
 	if err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	writeOK(w, map[string]interface{}{
@@ -76,7 +84,7 @@ func (h *Handler) Pull(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.UserID(r)
 	bookID, err := h.Store.BookIDOf(uid)
 	if err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	since := r.URL.Query().Get("since")
@@ -85,7 +93,7 @@ func (h *Handler) Pull(w http.ResponseWriter, r *http.Request) {
 	}
 	recs, err := h.Store.Pull(bookID, since)
 	if err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	writeOK(w, map[string]interface{}{
@@ -99,18 +107,18 @@ func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 	uid := middleware.UserID(r)
 	bookID, err := h.Store.BookIDOf(uid)
 	if err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	var body struct {
 		Records []db.Record `json:"records"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, "请求体解析失败")
+		writeErr(w, apperr.Param("请求体解析失败"))
 		return
 	}
 	if err := h.Store.Upsert(bookID, uid, body.Records); err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	writeOK(w, map[string]interface{}{
@@ -125,11 +133,11 @@ func (h *Handler) JoinBook(w http.ResponseWriter, r *http.Request) {
 		BookID int64 `json:"bookId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.BookID <= 0 {
-		writeErr(w, "缺少 bookId")
+		writeErr(w, apperr.Param("缺少邀请码"))
 		return
 	}
 	if err := h.Store.JoinBook(uid, body.BookID); err != nil {
-		writeErr(w, err.Error())
+		writeErr(w, err)
 		return
 	}
 	writeOK(w, map[string]interface{}{"bookId": body.BookID})

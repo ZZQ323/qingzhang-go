@@ -2,13 +2,26 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"qingzhang/internal/apperr"
 )
+
+// 401 也返回统一 {code,msg}，前端能拿到「登录失效」提示，而非空响应
+func writeUnauthorized(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"code": apperr.CodeUnauthorized,
+		"msg":  "登录已失效，请重新登录",
+	})
+}
 
 type ctxKey string
 
@@ -30,7 +43,7 @@ func Auth(secret []byte) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			auth := r.Header.Get("Authorization")
 			if !strings.HasPrefix(auth, "Bearer ") {
-				w.WriteHeader(http.StatusUnauthorized)
+				writeUnauthorized(w)
 				return
 			}
 			tokenStr := strings.TrimPrefix(auth, "Bearer ")
@@ -39,7 +52,7 @@ func Auth(secret []byte) func(http.Handler) http.Handler {
 				return secret, nil
 			})
 			if err != nil || !tok.Valid {
-				w.WriteHeader(http.StatusUnauthorized)
+				writeUnauthorized(w)
 				return
 			}
 			uid, _ := strconv.ParseInt(claims.Subject, 10, 64)
