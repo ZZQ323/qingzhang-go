@@ -39,6 +39,9 @@ ssh-keygen -t ed25519 -C "github-deploy-qingzhang" -f ~/.ssh/qz_deploy
 
 ## 四、服务器一次性准备
 
+`JWT_SECRET` 可以使用 `openssl` 生成 `openssl rand -base64 64`。
+
+
 ```bash
 # 1. 部署目录
 sudo mkdir -p /opt/qingzhang/_staging
@@ -86,6 +89,26 @@ sudo chmod 440 /etc/sudoers.d/qingzhang
 2. GitHub 仓库 Actions 页看流水线绿灯
 3. 服务器 `systemctl status qingzhang` 确认在新进程上运行
 4. `curl https://你的域名/api/sync/pull` 返回 401（没带 token，符合预期）即通
+
+
+如果是没有注册小程序，那么设置环境变量：
+- DEV_MODE=1
+- JWT_SECRET=本地随便一串至少32字节xxxxxxxxxx
+
+然后
+```bash
+go mod tidy          # 首次：联网拉 modernc.org/sqlite，生成 go.sum
+go run .
+```
+
+没有注册小程序可以测试：
+
+```bash
+# 登录拿 token
+curl -s -X POST localhost:8080/api/auth/login -d "{\"code\":\"test1\"}"
+# 用返回的 token 拉/推
+curl -s localhost:8080/api/sync/pull -H "Authorization: Bearer <token>"
+```
 
 ## 安全小结
 
