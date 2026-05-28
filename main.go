@@ -44,6 +44,7 @@ func main() {
 	mux.Handle("GET /api/sync/pull", auth(http.HandlerFunc(h.Pull)))
 	mux.Handle("POST /api/sync/push", auth(http.HandlerFunc(h.Push)))
 	mux.Handle("POST /api/book/join", auth(http.HandlerFunc(h.JoinBook)))
+	mux.Handle("POST /api/import", auth(http.HandlerFunc(h.Import)))
 
 	addr := ":" + env("PORT", "8080")
 	log.Printf("qingzhang listening on %s", addr)

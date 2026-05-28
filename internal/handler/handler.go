@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"qingzhang/internal/apperr"
+	"qingzhang/internal/bill"
 	"qingzhang/internal/db"
 	"qingzhang/internal/middleware"
 	"qingzhang/internal/wx"
@@ -141,6 +143,45 @@ func (h *Handler) JoinBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeOK(w, map[string]interface{}{"bookId": body.BookID})
+}
+
+// POST /api/import  body: {source:"wx"|"alipay", content:"<CSV原文>"}
+// 登录后使用（走 Auth 中间件）。解析账单 -> 按交易单号去重入库。
+func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.UserID(r)
+	bookID, err := h.Store.BookIDOf(uid)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var body struct {
+		Source  string `json:"source"`
+		Content string `json:"content"` // 文件原始字节的 base64（前端 readFile base64 直传，保留 GBK）
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Content == "" {
+		writeErr(w, apperr.Param("缺少账单内容"))
+		return
+	}
+	data, err := base64.StdEncoding.DecodeString(body.Content)
+	if err != nil {
+		writeErr(w, apperr.Param("账单内容需为 base64"))
+		return
+	}
+	recs, err := bill.Parse(body.Source, data)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	imported, skipped, err := h.Store.ImportRecords(bookID, uid, recs)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeOK(w, map[string]interface{}{
+		"imported": imported, // 新增条数
+		"skipped":  skipped,  // 重复跳过条数
+		"parsed":   len(recs),
+	})
 }
 
 func max(a, b int) int {
