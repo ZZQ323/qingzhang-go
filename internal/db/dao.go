@@ -2,8 +2,9 @@ package db
 
 import (
 	"database/sql"
-	"fmt"
 	"time"
+
+	"qingzhang/internal/apperr"
 )
 
 // Data Access Object 层
@@ -87,7 +88,7 @@ func (s *Store) JoinBook(userID, bookID int64) error {
 	var exists int
 	if err := s.DB.QueryRow(`SELECT 1 FROM user WHERE id=?`, bookID).Scan(&exists); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("邀请码无效")
+			return apperr.Invite("邀请码无效")
 		}
 		return err
 	}
