@@ -44,6 +44,9 @@ func main() {
 	mux.Handle("GET /api/sync/pull", auth(http.HandlerFunc(h.Pull)))
 	mux.Handle("POST /api/sync/push", auth(http.HandlerFunc(h.Push)))
 	mux.Handle("POST /api/book/join", auth(http.HandlerFunc(h.JoinBook)))
+	mux.Handle("GET /api/books", auth(http.HandlerFunc(h.ListBooks)))
+	mux.Handle("POST /api/books", auth(http.HandlerFunc(h.CreateBook)))
+	mux.Handle("POST /api/books/switch", auth(http.HandlerFunc(h.SwitchBook)))
 	mux.Handle("POST /api/import", auth(http.HandlerFunc(h.Import)))
 
 	addr := ":" + env("PORT", "8080")

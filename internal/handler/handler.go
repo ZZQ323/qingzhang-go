@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"qingzhang/internal/apperr"
@@ -182,6 +183,53 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 		"skipped":  skipped,  // 重复跳过条数
 		"parsed":   len(recs),
 	})
+}
+
+// GET /api/books  我的账本列表（带当前账本标记）
+func (h *Handler) ListBooks(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.UserID(r)
+	books, err := h.Store.ListBooks(uid)
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	cur, _ := h.Store.BookIDOf(uid)
+	writeOK(w, map[string]interface{}{"books": books, "currentBookId": cur})
+}
+
+// POST /api/books  {name}  新建账本并切为当前
+func (h *Handler) CreateBook(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.UserID(r)
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Name) == "" {
+		writeErr(w, apperr.Param("请输入账本名称"))
+		return
+	}
+	b, err := h.Store.CreateBook(uid, strings.TrimSpace(body.Name))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeOK(w, b)
+}
+
+// POST /api/books/switch  {bookId}  切换当前账本
+func (h *Handler) SwitchBook(w http.ResponseWriter, r *http.Request) {
+	uid := middleware.UserID(r)
+	var body struct {
+		BookID int64 `json:"bookId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.BookID <= 0 {
+		writeErr(w, apperr.Param("缺少 bookId"))
+		return
+	}
+	if err := h.Store.SwitchBook(uid, body.BookID); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeOK(w, map[string]interface{}{"bookId": body.BookID})
 }
 
 func max(a, b int) int {

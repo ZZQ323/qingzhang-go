@@ -56,6 +56,36 @@ func (s *Store) Migrate() error {
 		`ALTER TABLE record ADD COLUMN external_id TEXT NOT NULL DEFAULT ''`,
 		// 同一账本内交易单号唯一；空串不参与去重（手记记录无单号）。
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_extid ON record(book_id, external_id) WHERE external_id <> ''`,
+
+		// ── 多账本 ──
+		// book：账本（id 沿用旧 book_id 体系，个人账本 id=user.id，保证历史 record.book_id 不失效）
+		`CREATE TABLE IF NOT EXISTS book (
+			id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			name      TEXT NOT NULL,
+			owner_id  INTEGER NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+		// user_book：用户可访问哪些账本（多对多）
+		`CREATE TABLE IF NOT EXISTS user_book (
+			user_id INTEGER NOT NULL,
+			book_id INTEGER NOT NULL,
+			PRIMARY KEY(user_id, book_id)
+		)`,
+		// user 增加「当前账本」
+		`ALTER TABLE user ADD COLUMN current_book_id INTEGER NOT NULL DEFAULT 0`,
+		// 个人账本 id 沿用 user.id（小整数）；新建账本走 book 自增，
+		// 把自增起点抬到 100000 以上，与 user.id 空间隔离，避免撞车。
+		`UPDATE sqlite_sequence SET seq=100000 WHERE name='book' AND seq<100000`,
+		`INSERT INTO sqlite_sequence(name,seq) SELECT 'book',100000 WHERE NOT EXISTS(SELECT 1 FROM sqlite_sequence WHERE name='book')`,
+		// ── 历史数据迁移（幂等）──
+		// 每个用户的个人账本
+		`INSERT OR IGNORE INTO book(id, name, owner_id) SELECT id, '我的账本', id FROM user`,
+		// 自己能访问自己的个人账本
+		`INSERT OR IGNORE INTO user_book(user_id, book_id) SELECT id, id FROM user`,
+		// 曾加入过别人账本的，补进 user_book
+		`INSERT OR IGNORE INTO user_book(user_id, book_id) SELECT id, book_id FROM user WHERE book_id<>0 AND book_id<>id`,
+		// 设定当前账本：原 book_id 有效则用它，否则用个人账本
+		`UPDATE user SET current_book_id = CASE WHEN book_id<>0 THEN book_id ELSE id END WHERE current_book_id=0`,
 	}
 	for _, q := range stmts {
 		if _, err := s.DB.Exec(q); err != nil {
